@@ -1,8 +1,7 @@
 Comandos utilizados, práctica laboratorio 5.1: Alta Disponibilidad y Clustering.
-
-SINCRONIZACIÓN DE CARPETAS CON RSYNC
-
-============================================
+*****************************************************************************************************************************************************************************************************************
+Practica 1: Syncronizacion de carpetas con Rsync
+*****************************************************************************************************************************************************************************************************************
 
 # Usaremos dos máquinas Rocky; una principal en la que haremos las carpetas, y una clon en la que sincronizaremos informarción. Primero, descargamos rsync ambos servidores:
 
@@ -71,3 +70,67 @@ cd ~/sync
 ls
 
 # Si los archivos creados previamente (SDnorte) aparecen en la capeta, significa que el script ha funcionado correctamente.
+*******************************************************************************************************************************************************************************************************************
+Practica 2: Instalacion y configuracion del Cluster 
+*******************************************************************************************************************************************************************************************************************
+# Utilizaremos dos servidores Rocky, uno principal y uno secundario. En ambos servidores, habilitaremos los repositorios de alta disponibilidad:
+
+sudo dnf install -y epel-release
+sudo dnf install -y 'dnf-command(config-manager)'
+sudo dnf config-manager --set-enabled highavailability
+
+
+# Luego, en ambos servidores, instalamos Pacemaker y herramientas necesarias:
+
+sudo dnf install -y pacemaker pcs resource-agents
+
+# Habilitamos y arrancamos los servicios en ambos servidores:
+
+sudo systemctl enable --now pcsd
+sudo systemctl start pcsd
+
+# Configuramos la contraseña del usuario, hacluster, en ambos servidores:
+
+sudo passwd hacluster
+
+# En ambos servidores, permitimos la comunicación del clúster a través del Firewall:
+
+sudo firewall-cmd --permanent --add-service=high-availability
+sudo firewall-cmd --reload
+
+# Luego, para autenticar los nodos y hosts entre sí, desde el servidor principal ejecutamos el siguiente comando utilizando las IP addresses de los servidores utilizados (ejecutar solo en uno de los servidores):
+
+sudo pcs host auth 10.0.0.100 10.0.0.50 -u hacluster -p 12345678
+sudo pcs cluster setup cluster-Ramon 10.0.0.100 10.0.0.50
+
+# Tendremos que insertar la contraseña del usuario hacluster. Luego, creamos el clúster y asignamos un nombre (ejecutamos solo en un servidor):
+
+sudo pcs cluster setup cluster-Ramon 10.0.0.100 10.0.0.50
+
+
+# Luego, en solo uno de los servidores, habilitamos e iniciamos el clúster:
+
+sudo pcs cluster enable --all
+sudo pcs cluster start --all
+
+# Para verificar el estado del clúster ejecutamos el siguiente comando en cualquiera de los dos servidores:
+
+sudo pcs status
+
+# Deshabilitamos STONITH (Medida de protección de fallas. Opcional)
+
+sudo pcs property set stonith-enabled=false
+
+# Ignorar la política de Quórum (Necesario para que el nodo restante siga activo)
+
+sudo pcs property set no-quorum-policy=ignore
+
+# Luego, en uno de los servidores, configuramos la IP address virtual (flotante) que se moverá entre nodos si uno falla:
+
+sudo pcs resource create IP_Flotante ocf:heartbeat:IPaddr2 ip=10.0.0.200 cidr_netmask=24 op monitor interval=30s
+
+# Luego de ello, desde nuestra máquina host probamos la disponibilidad de los nodos: hacemos un ping permanente a la IP address virtual:
+
+ping 10.0.0.200
+
+# Mientras hacemos ping, reiniciamos los servidores de forma intercalada para comprobar que Pacemaker transfiere la IP flotante al nodo restante. Si el ping no se pierde, la configuración ha sido exitosa.
