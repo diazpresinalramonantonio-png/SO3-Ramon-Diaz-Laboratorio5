@@ -134,3 +134,98 @@ sudo pcs resource create IP_Flotante ocf:heartbeat:IPaddr2 ip=10.0.0.200 cidr_ne
 ping 10.0.0.200
 
 # Mientras hacemos ping, reiniciamos los servidores de forma intercalada para comprobar que Pacemaker transfiere la IP flotante al nodo restante. Si el ping no se pierde, la configuración ha sido exitosa.
+***********************************************************************************************************************************************************************************************************************
+Comandos utilizados, práctica laboratorio 5.3: Alta Disponibilidad y Clustering.
+
+Practica 3: Cluster de Alta Disponibilidad HTTP
+
+=======================================================================================================================================================================================================================
+
+# Utilizaremos dos máquinas Rocky, la principal y un clon. Debemos descargar el servidor web en ambos servidores, en este caso, Apache:
+
+sudo dnf install httpd
+
+# Creamos una página index.html en cada servidor:
+
+echo "<h1>Servidor 1 - IP: 10.0.0.100</h1>" | sudo tee /var/www/html/index.html
+
+echo "<h1>Servidor 2 - IP: 10.0.0.50</h1>" | sudo tee /var/www/html/index.html
+
+# Determino el usuario:
+
+sudo chown Ramon:Ramon /var/www/html/index.html
+
+# Habilitamos http en los firewalls de Rocky:
+
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --reload
+
+
+# Luego, habilitamos y arrancamos Apache en cada servidor:
+
+sudo systemctl enable httpd
+sudo systemctl start httpd
+sudo systemctl status httpd
+
+# Instalamos Keepalived en ambos servidores:
+
+sudo dnf install keepalived
+
+# Habilitar el protocolo VRRP en el Firewall (Obligatorio para que los nodos se hablen)
+
+sudo firewall-cmd --add-protocol=vrrp --permanent
+sudo firewall-cmd --reload
+
+# Limpiar archivo de configuración por defecto
+sudo rm -f /etc/keepalived/keepalived.conf
+
+# Luego, para configurar Keepalived, debemos editar el archivo de configuración. En esta ocasión, eliminamos el archivo existente y creamos uno nuevo en cada servidor:
+
+sudo nano /etc/keepalived/keepalived.conf
+
+# Luego de ello, colocamos los parámetros de cada servidor:
+
+vrrp_instance VI_1 {
+    state MASTER
+    interface enp0s3
+    virtual_router_id 51
+    priority 99
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 12345
+    }
+    virtual_ipaddress {
+        10.0.0.200
+    }
+}
+
+
+vrrp_instance VI_1 {
+    state BACKUP
+    interface enp0s3
+    virtual_router_id 51
+    priority 50
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 12345
+    }
+    virtual_ipaddress {
+        10.0.0.200
+    }
+}
+
+
+# Al finalizar la configuración, iniciamos y habilitamos Keepalived:
+
+sudo systemctl enable keepalived
+sudo systemctl start keepalived
+sudo systemctl status keepalived
+
+# De igual forma reiniciamos el servicio Apache:
+
+sudo systemctl restart httpd
+sudo systemctl status httpd
+
+
